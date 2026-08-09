@@ -18,6 +18,7 @@ This integration connects Home Assistant with the Sector Alarm system allowing m
 
 ## Supported features ##
 - ✅ Alarm control
+- ✅ History & Event tracking (User name and arm/disarm method via `changed_by` & attributes)
 - ✅ Door lock
 - ✅ Smart Plugs
 - ✅ Temperature sensors

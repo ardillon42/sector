@@ -1600,8 +1600,14 @@ async def test_async_update_data_should_proccess_log_events(
 
     # Assert
     assert "logs" in coordinator_data
+    logs = coordinator_data["logs"]
+    assert "LOCK_SERIAL" in logs
+    assert "unlock" in logs["LOCK_SERIAL"]
+    assert "lock" in logs["LOCK_SERIAL"]
+    assert "1234" in logs
+    assert "disarmed" in logs["1234"]
+    assert "armed" in logs["1234"]
 
-    # TODO, re-write log event proccess an add assert
 
 
 async def test_async_update_data_should_raise_ConfigEntryAuthFailed_exception_on_LoginError(

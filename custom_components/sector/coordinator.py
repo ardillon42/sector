@@ -805,6 +805,14 @@ class _DeviceProcessor:
             if entity_model == DataEndpointType.LOCK_STATUS.value
         }
 
+        panel_serials = [
+            serial_no
+            for serial_no, device in devices.items()
+            for entity_model in device["entities"].keys()
+            if entity_model == "Alarm panel" or entity_model == DataEndpointType.PANEL_STATUS.value
+        ]
+        panel_serial_no = panel_serials[0] if panel_serials else None
+
         for log_entry in records:
             if not isinstance(log_entry, dict):
                 _LOGGER.error("Skipping invalid log entry: %s", log_entry)
@@ -816,7 +824,7 @@ class _DeviceProcessor:
             user = log_entry.get("User", "")
             channel = log_entry.get("Channel", "")
 
-            if not lock_name or not event_type or not timestamp:
+            if not event_type or not timestamp:
                 _LOGGER.debug("Skipping incomplete log entry: %s", log_entry)
                 continue
 
@@ -828,24 +836,33 @@ class _DeviceProcessor:
                 _LOGGER.error("Invalid timestamp in log entry: %s", log_entry)
                 continue
 
-            serial_no = lock_names.get(lock_name)
+            if lock_name:
+                serial_no = lock_names.get(lock_name)
+                device_label = lock_name
+            else:
+                serial_no = panel_serial_no
+                device_label = (
+                    devices.get(serial_no, {}).get("name", "Alarm")
+                    if serial_no
+                    else "Alarm"
+                )
+
             if not serial_no:
                 _LOGGER.debug(
-                    "Unknown lock name '%s', skipping log entry: %s",
-                    lock_name,
+                    "Unknown device for log entry, skipping: %s",
                     log_entry,
                 )
                 continue
 
             # Check against the latest event from Home Assistant
-            latest_log = self._get_latest_log(event_type, lock_name)
+            latest_log = self._get_latest_log(event_type, lock_name or device_label)
             if latest_log:
                 try:
                     latest_time = latest_log["time"]
                     if datetime.fromisoformat(timestamp) <= latest_time:
                         _LOGGER.debug(
-                            "Skipping event for lock '%s' (serial %s): event is not newer than %s.",
-                            lock_name,
+                            "Skipping event for '%s' (serial %s): event is not newer than %s.",
+                            device_label,
                             serial_no,
                             latest_time,
                         )
@@ -857,7 +874,8 @@ class _DeviceProcessor:
                     )
                     continue
 
-            formatted_event = f"{lock_name} {event_type.replace('_', ' ')} by {user or 'unknown'} via {channel or 'unknown'}"
+            channel_str = f" via {channel}" if channel else " via PIN"
+            formatted_event = f"{device_label} {event_type.replace('_', ' ')} by {user or 'unknown'}{channel_str}"
 
             # Group valid events
             grouped_events.setdefault(serial_no, {}).setdefault(event_type, []).append(
@@ -871,8 +889,8 @@ class _DeviceProcessor:
             )
 
             _LOGGER.debug(
-                "Processed event for lock '%s' (serial %s) with type '%s' at %s by %s via %s",
-                lock_name,
+                "Processed event for '%s' (serial %s) with type '%s' at %s by %s via %s",
+                device_label,
                 serial_no,
                 event_type,
                 timestamp,
@@ -880,8 +898,28 @@ class _DeviceProcessor:
                 channel or "unknown channel",
             )
 
-        _LOGGER.debug("Grouped events by lock: %s", grouped_events)
+        _LOGGER.debug("Grouped events: %s", grouped_events)
         return grouped_events
+
+    def get_latest_log_for_device(self, serial_no: str) -> dict[str, Any] | None:
+        """Return the most recent log record for a given device serial."""
+        device_events = self._event_logs.get(serial_no, {})
+        latest_record = None
+        latest_time = None
+        for event_type, records in device_events.items():
+            if records:
+                rec = records[-1]
+                rec_time_str = rec.get("time")
+                if rec_time_str:
+                    try:
+                        rec_time = datetime.fromisoformat(rec_time_str)
+                        if latest_time is None or rec_time > latest_time:
+                            latest_time = rec_time
+                            latest_record = rec
+                    except ValueError:
+                        pass
+        return latest_record
+
 
     def _get_latest_log(self, event_type: str, lock_name: str):
         """Retrieve the latest log for a specific event type, optionally by LockName."""

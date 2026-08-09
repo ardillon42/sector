@@ -332,3 +332,34 @@ class SectorAlarmControlPanel(
         alarm_panel = self.entity_data or {}
         sensors: dict[str, Any] = alarm_panel.get("sensors", {})
         return sensors.get("alarm_status", 0)
+
+    def _get_latest_panel_log(self) -> dict[str, Any] | None:
+        """Retrieve the latest log entry for this alarm panel."""
+        return self.coordinator.get_latest_log_for_device(self._serial_no)
+
+    @property
+    def changed_by(self) -> str | None:
+        """Last change triggered by."""
+        latest_log = self._get_latest_panel_log()
+        if not latest_log:
+            return None
+        user = latest_log.get("user") or "unknown"
+        channel = latest_log.get("channel")
+        if channel:
+            return f"{user} (via {channel})"
+        return f"{user} (via PIN)"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return device state attributes."""
+        attrs = super().extra_state_attributes or {}
+        latest_log = self._get_latest_panel_log()
+        if latest_log:
+            user = latest_log.get("user") or "unknown"
+            channel = latest_log.get("channel") or "code"
+            attrs["changed_by"] = user
+            attrs["changed_via"] = channel
+            attrs["last_event_time"] = latest_log.get("time")
+            attrs["formatted_event"] = latest_log.get("formatted_event")
+        return attrs
+

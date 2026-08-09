@@ -100,7 +100,19 @@ class SectorAlarmEvent(
     @property
     def event_types(self):
         """Return the list of event types this entity can handle."""
-        return ["lock", "unlock", "lock_failed"]
+        return [
+            "lock",
+            "unlock",
+            "lock_failed",
+            "disarmed",
+            "armed",
+            "partially_armed",
+            "arm_away",
+            "arm_home",
+            "arm",
+            "disarm",
+        ]
+
 
     @callback
     def _async_handle_event(self):
